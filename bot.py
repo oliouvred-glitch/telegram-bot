@@ -1,31 +1,12 @@
 import os
 import requests
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import Application, MessageHandler, ContextTypes, filters
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN not found")
-
-if not OPENROUTER_API_KEY:
-    raise ValueError("OPENROUTER_API_KEY not found")
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Hello! I am your AI chatbot. Send me a message."
-    )
-
-
-async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
 
     try:
@@ -36,7 +17,7 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Content-Type": "application/json",
             },
             json={
-                "model": "openai/gpt-oss-20b",
+                "model": "openrouter/free",
                 "messages": [
                     {
                         "role": "user",
@@ -44,37 +25,36 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     }
                 ]
             },
-            timeout=60,
+            timeout=60
         )
 
-        data = response.json()
+        result = response.json()
+        print("API Response:", result)
 
-        if "choices" in data:
-            reply = data["choices"][0]["message"]["content"]
+        if "choices" in result:
+            answer = result["choices"][0]["message"]["content"]
+        elif "error" in result:
+            answer = f"OpenRouter Error: {result['error']['message']}"
         else:
-            reply = f"API Error:\n{data}"
-
-        if len(reply) > 4000:
-            reply = reply[:4000]
-
-        await update.message.reply_text(reply)
+            answer = str(result)
 
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        answer = f"Error: {e}"
 
+    await update.message.reply_text(answer)
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, chat)
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            reply
+        )
     )
 
-    print("Bot is running...")
-    app.run_polling(drop_pending_updates=True)
-
+    print("Bot running...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
-
